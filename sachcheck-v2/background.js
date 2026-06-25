@@ -153,7 +153,7 @@ Rules:
     tools: [{ google_search: {} }],
     generationConfig: {
       temperature: 0.1,
-      maxOutputTokens: 512
+      maxOutputTokens: 256
     }
   };
 
@@ -161,7 +161,7 @@ Rules:
     contents: [{ parts: [{ text: prompt }] }],
     generationConfig: {
       temperature: 0.1,
-      maxOutputTokens: 512
+      maxOutputTokens: 256
     }
   };
 

@@ -172,7 +172,7 @@ function injectSidebar() {
     </div>
 
     <div class="sc-footer">
-      <span>Powered by Gemini AI + Google Search</span>
+      <span>Powered by Groq AI + DDG Search</span>
     </div>
   `;
 
