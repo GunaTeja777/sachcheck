@@ -71,20 +71,29 @@ function updateActiveTab() {
     }
 
     // Check running state on the content script
-    chrome.tabs.sendMessage(tab.id, { type: "STATUS" }, res => {
-      if (chrome.runtime.lastError) {
-        setStartUI();
-        isRunning = false;
-        return;
-      }
-      if (res?.running) {
-        isRunning = true;
-        setStopUI();
-      } else {
-        isRunning = false;
-        setStartUI();
-      }
-    });
+    try {
+      chrome.tabs.sendMessage(tab.id, { type: "STATUS" }, res => {
+        if (chrome.runtime.lastError) {
+          if (tab.url?.includes("youtube.com")) {
+            channelText.textContent = "⚠️ Please refresh the YouTube tab to initialize";
+          }
+          setStartUI();
+          isRunning = false;
+          return;
+        }
+        if (res?.running) {
+          isRunning = true;
+          setStopUI();
+        } else {
+          isRunning = false;
+          setStartUI();
+        }
+      });
+    } catch (e) {
+      console.warn("[SachCheck] Could not request status from tab:", e);
+      setStartUI();
+      isRunning = false;
+    }
   });
 }
 
@@ -94,7 +103,7 @@ updateActiveTab();
 // Listen for tab switching and URL updates
 chrome.tabs.onActivated.addListener(updateActiveTab);
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.status === "complete" && tab.active) {
+  if (changeInfo.status === "complete" && tab && tab.active) {
     updateActiveTab();
   }
 });
@@ -130,14 +139,22 @@ mainBtn.addEventListener("click", () => {
   }
 
   // Save key
-  chrome.runtime.sendMessage({ type: "SAVE_API_KEY", apiKey: key });
-  chrome.runtime.sendMessage({ type: "SAVE_VOICE_PREF", enabled: voiceOn });
+  chrome.runtime.sendMessage({ type: "SAVE_API_KEY", apiKey: key }, () => {
+    if (chrome.runtime.lastError) {}
+  });
+  chrome.runtime.sendMessage({ type: "SAVE_VOICE_PREF", enabled: voiceOn }, () => {
+    if (chrome.runtime.lastError) {}
+  });
 
   chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
     const tab = tabs[0];
     if (!tab) return;
     const type = isRunning ? "STOP" : "START";
     chrome.tabs.sendMessage(tab.id, { type }, () => {
+      if (chrome.runtime.lastError) {
+        console.warn("[SachCheck] sendMessage failed:", chrome.runtime.lastError.message);
+        return;
+      }
       isRunning = !isRunning;
       isRunning ? setStopUI() : setStartUI();
     });
