@@ -8,9 +8,12 @@ let lastClaim    = "";
 let voiceEnabled = true;
 let checkCount   = 0;
 
-// Caption history: store last N unique caption texts to detect changes
+// Caption history and streaming buffer state
 const CAPTION_HISTORY_SIZE = 5;
 let captionHistory = [];
+let accumulatedText = "";
+let lastRequestTime = 0;
+const POLL_INTERVAL = 1500; // Poll YouTube DOM every 1.5 seconds to capture all segments
 
 // Helper to detect Devanagari (Hindi) characters
 function containsDevanagari(text) {
@@ -253,12 +256,22 @@ async function pollLoop() {
 
   const caption = scrapeYouTubeCaptions();
 
-  if (caption && isCaptionNew(caption)) {
-    setCaptionPreview(caption);
-    const claim = extractBestClaim(caption);
+  if (caption && caption.length > 5) {
+    // Append the new caption text to our accumulated running buffer
+    accumulatedText = appendToBuffer(accumulatedText, caption);
+    
+    // Update the live preview with the last 130 characters of our text buffer
+    setCaptionPreview(accumulatedText);
 
-    if (claim && claim !== lastClaim) {
+    // Look for the best factual claim in the accumulated text
+    const claim = extractBestClaim(accumulatedText);
+
+    // Check if a new claim has been found, it's different from the last checked claim,
+    // and at least 12 seconds have passed since our last Gemini API request (to prevent spamming/rate limits)
+    if (claim && claim !== lastClaim && (Date.now() - lastRequestTime > 12000)) {
       lastClaim = claim;
+      lastRequestTime = Date.now();
+      
       setStatus("🔍 Checking with Gemini...");
 
       const apiKey = await getKey();
@@ -268,6 +281,7 @@ async function pollLoop() {
         return;
       }
 
+      // Send fact-check request
       const response = await chrome.runtime.sendMessage({
         type: "FACT_CHECK",
         claim,
@@ -277,6 +291,10 @@ async function pollLoop() {
       if (response.success) {
         addResultCard(claim, response.result);
         setStatus("🟢 Live — last checked " + new Date().toLocaleTimeString("en-IN"));
+        // Trim the buffer after a successful check to keep it fresh and prevent duplicates
+        if (accumulatedText.length > 150) {
+          accumulatedText = accumulatedText.slice(-100);
+        }
       } else {
         setStatus("⚠️ Error: " + (response.error || "unknown"));
         console.log("[SachCheck] Fact-check API error:", response.error);
@@ -284,12 +302,43 @@ async function pollLoop() {
     }
   }
 
+  // If the buffer grows too large, trim it so it stays fresh
+  if (accumulatedText.length > 350) {
+    accumulatedText = accumulatedText.slice(-250);
+  }
+
   scheduleNext();
 }
 
 function scheduleNext() {
   if (!isRunning) return;
-  checkTimer = setTimeout(pollLoop, 9000); // every 9s
+  checkTimer = setTimeout(pollLoop, POLL_INTERVAL);
+}
+
+// Seamlessly appends new caption segments to the buffer by checking for overlapping words
+function appendToBuffer(currentBuffer, newText) {
+  const words1 = currentBuffer.trim().split(/\s+/);
+  const words2 = newText.trim().split(/\s+/);
+  
+  if (words1.length === 0 || currentBuffer.trim() === "") return newText;
+  
+  // Find the longest overlap at the end of words1 and the start of words2
+  let maxOverlap = 0;
+  const checkLimit = Math.min(words1.length, words2.length, 12);
+  
+  for (let i = 1; i <= checkLimit; i++) {
+    const tail = words1.slice(-i).join(" ").toLowerCase();
+    const head = words2.slice(0, i).join(" ").toLowerCase();
+    if (tail === head) {
+      maxOverlap = i;
+    }
+  }
+  
+  const newSegment = words2.slice(maxOverlap).join(" ");
+  if (newSegment.length > 0) {
+    return (currentBuffer + " " + newSegment).trim();
+  }
+  return currentBuffer;
 }
 
 function getKey() {
@@ -302,6 +351,8 @@ function getKey() {
 function startFactChecking() {
   if (isRunning) return;
   isRunning = true;
+  accumulatedText = "";
+  lastRequestTime = 0;
 
   // Load voice pref
   chrome.runtime.sendMessage({ type: "GET_VOICE_PREF" }, r => {
