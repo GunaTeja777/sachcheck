@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SachCheck</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      width: 100%;
+      min-width: 250px;
+      background: #111214;
+      color: #d4d4d8;
+      font-family: -apple-system, 'Inter', 'Segoe UI', sans-serif;
+      font-size: 13px;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    .hdr {
+      background: #18191c;
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid #232527;
+    }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-bottom: 3px;
+    }
+
+    .brand-icon { font-size: 20px; }
+
+    .brand-name {
+      font-size: 17px;
+      font-weight: 800;
+      color: #ff6b35;
+      letter-spacing: -0.4px;
+    }
+
+    .brand-ver {
+      font-size: 10px;
+      color: #52525b;
+      background: #232527;
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+
+    .tagline {
+      font-size: 11px;
+      color: #52525b;
+    }
+
+    .body {
+      flex: 1;
+      padding: 12px 14px;
+      overflow-y: auto;
+    }
+
+    /* ── Channel status ── */
+    .channel-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #18191c;
+      border: 1px solid #232527;
+      border-radius: 8px;
+      padding: 9px 11px;
+      margin-bottom: 12px;
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #3f3f46;
+      flex-shrink: 0;
+    }
+
+    .dot.active {
+      background: #22c55e;
+      animation: blink 1.5s infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    #channel-text { font-size: 11px; color: #71717a; }
+    .channel-row.detected #channel-text { color: #22c55e; }
+
+    /* ── API Key ── */
+    .field-label {
+      font-size: 10px;
+      color: #52525b;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+
+    input[type="password"] {
+      flex: 1;
+      background: #18191c;
+      border: 1px solid #2a2a2e;
+      border-radius: 6px;
+      padding: 7px 9px;
+      color: #e4e4e7;
+      font-size: 11px;
+      outline: none;
+    }
+
+    input[type="password"]:focus { border-color: #ff6b35; }
+
+    .btn-save {
+      background: #232527;
+      border: 1px solid #2a2a2e;
+      color: #a1a1aa;
+      border-radius: 6px;
+      padding: 7px 10px;
+      font-size: 11px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .btn-save:hover { background: #2a2b2e; color: #e4e4e7; }
+
+    .saved-msg {
+      font-size: 10px;
+      color: #22c55e;
+      margin-bottom: 10px;
+      height: 14px;
+    }
+
+    /* ── Voice toggle ── */
+    .voice-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+      margin-bottom: 10px;
+      border-top: 1px solid #1c1d1f;
+      border-bottom: 1px solid #1c1d1f;
+    }
+
+    .voice-label {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      color: #a1a1aa;
+    }
+
+    .toggle {
+      width: 36px;
+      height: 20px;
+      background: #3f3f46;
+      border-radius: 10px;
+      position: relative;
+      cursor: pointer;
+      border: none;
+      transition: background 0.2s;
+      flex-shrink: 0;
+    }
+
+    .toggle.on { background: #ff6b35; }
+
+    .toggle::after {
+      content: "";
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      background: #fff;
+      border-radius: 50%;
+      top: 3px;
+      left: 3px;
+      transition: transform 0.2s;
+    }
+
+    .toggle.on::after { transform: translateX(16px); }
+
+    /* ── Main button ── */
+    .main-btn {
+      width: 100%;
+      padding: 11px;
+      border-radius: 8px;
+      border: none;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s;
+      margin-bottom: 9px;
+      letter-spacing: -0.2px;
+    }
+
+    .btn-start { background: #ff6b35; color: #fff; }
+    .btn-start:hover { background: #e55a24; }
+    .btn-stop { background: #1a1a1e; color: #ef4444; border: 1px solid #2a1515; }
+    .btn-stop:hover { background: #200d0d; }
+
+    .hint {
+      font-size: 10px;
+      color: #3f3f46;
+      text-align: center;
+      line-height: 1.6;
+    }
+
+    /* ── Footer ── */
+    .footer {
+      padding: 8px 14px;
+      border-top: 1px solid #1c1d1f;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .footer-l { font-size: 10px; color: #2a2a2e; }
+    .footer-r { font-size: 10px; color: #3f3f46; }
+    .footer-r span { color: #4285f4; }
+  </style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="brand-row">
+    <span class="brand-icon">&#x26A1;</span>
+    <span class="brand-name">SachCheck</span>
+    <span class="brand-ver">v2.0</span>
+  </div>
+  <div class="tagline">Live fact-checker for Indian news</div>
+</div>
+
+<div class="body">
+
+  <!-- Channel detection -->
+  <div class="channel-row" id="channel-row">
+    <span class="dot" id="dot"></span>
+    <span id="channel-text">Open a YouTube Live stream to begin</span>
+  </div>
+
+  <!-- Gemini API Key -->
+  <div class="field-label">Gemini API Key</div>
+  <div class="input-row">
+    <input type="password" id="api-key" placeholder="AIza..." />
+    <button class="btn-save" id="save-btn">Save</button>
+  </div>
+  <div class="saved-msg" id="saved-msg"></div>
+
+  <!-- Voice toggle -->
+  <div class="voice-row">
+    <span class="voice-label">
+      &#128266; Speak verdicts aloud
+    </span>
+    <button class="toggle on" id="voice-toggle" aria-label="Toggle voice"></button>
+  </div>
+
+  <!-- Start/Stop -->
+  <button class="main-btn btn-start" id="main-btn">&#9654; Start Fact-Checking</button>
+
+  <div class="hint">
+    Enable CC (captions) on YouTube for best accuracy.<br>
+    Works on Republic TV, NDTV, Zee News &amp; more.
+  </div>
+
+</div>
+
+<div class="footer">
+  <span class="footer-l">Portfolio project</span>
+  <span class="footer-r">Powered by <span>Gemini AI</span></span>
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>

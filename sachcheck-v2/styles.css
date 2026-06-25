@@ -1,0 +1,225 @@
+/* SachCheck v2 — Sidebar Styles */
+
+#sc-sidebar {
+  position: fixed;
+  top: 72px;
+  right: 16px;
+  width: 310px;
+  max-height: 82vh;
+  background: #111214;
+  border: 1px solid #232527;
+  border-radius: 14px;
+  font-family: -apple-system, 'Inter', 'Segoe UI', sans-serif;
+  font-size: 12px;
+  color: #d4d4d8;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+  overflow: hidden;
+  user-select: none;
+}
+
+/* ── Header ── */
+.sc-hdr {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  background: #18191c;
+  border-bottom: 1px solid #232527;
+  flex-shrink: 0;
+}
+
+.sc-logo {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ff6b35;
+  letter-spacing: -0.3px;
+  flex: 1;
+}
+
+.sc-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  background: #ef444420;
+  color: #ef4444;
+  border: 1px solid #ef444440;
+  border-radius: 4px;
+  padding: 2px 5px;
+  animation: pulse-badge 2s infinite;
+}
+
+@keyframes pulse-badge {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+
+.sc-voice-btn,
+.sc-close-btn {
+  background: none;
+  border: none;
+  color: #555;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 4px;
+  line-height: 1;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+
+.sc-voice-btn:hover { color: #ff6b35; }
+.sc-close-btn:hover { color: #e8e8e8; }
+
+/* ── Caption strip ── */
+.sc-caption-strip {
+  padding: 7px 12px;
+  background: #0e0f11;
+  border-bottom: 1px solid #1c1d1f;
+  color: #52525b;
+  font-size: 11px;
+  font-style: italic;
+  line-height: 1.5;
+  min-height: 34px;
+  max-height: 44px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+
+/* ── Status bar ── */
+.sc-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 12px;
+  background: #15161a;
+  border-bottom: 1px solid #1c1d1f;
+  flex-shrink: 0;
+}
+
+#sc-status-text {
+  font-size: 10px;
+  color: #52525b;
+}
+
+.sc-count {
+  font-size: 10px;
+  color: #ff6b3580;
+  font-weight: 600;
+}
+
+/* ── Feed ── */
+.sc-feed {
+  overflow-y: auto;
+  flex: 1;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.sc-feed::-webkit-scrollbar { width: 3px; }
+.sc-feed::-webkit-scrollbar-track { background: transparent; }
+.sc-feed::-webkit-scrollbar-thumb { background: #2a2a2e; border-radius: 2px; }
+
+.sc-empty-state {
+  color: #3f3f46;
+  font-size: 11px;
+  text-align: center;
+  padding: 24px 12px;
+  line-height: 1.7;
+}
+
+/* ── Cards ── */
+.sc-card {
+  background: #18191c;
+  border-radius: 9px;
+  padding: 9px 11px;
+  border-left: 3px solid transparent;
+  animation: slide-in 0.28s ease;
+}
+
+@keyframes slide-in {
+  from { opacity: 0; transform: translateY(-5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.v-true        { border-left-color: #22c55e; }
+.v-misleading  { border-left-color: #f59e0b; }
+.v-false       { border-left-color: #ef4444; }
+.v-unverified  { border-left-color: #818cf8; }
+
+.sc-card-top {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 5px;
+}
+
+.sc-emoji { font-size: 13px; }
+
+.sc-verdict-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+}
+
+.v-true       .sc-verdict-label { color: #22c55e; }
+.v-misleading .sc-verdict-label { color: #f59e0b; }
+.v-false      .sc-verdict-label { color: #ef4444; }
+.v-unverified .sc-verdict-label { color: #818cf8; }
+
+.sc-conf {
+  font-size: 10px;
+  color: #3f3f46;
+  background: #232527;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.sc-time {
+  margin-left: auto;
+  font-size: 10px;
+  color: #3f3f46;
+}
+
+.sc-claim-quote {
+  color: #71717a;
+  font-size: 10px;
+  font-style: italic;
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+
+.sc-summary {
+  color: #e4e4e7;
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 4px;
+  line-height: 1.45;
+}
+
+.sc-evidence {
+  color: #71717a;
+  font-size: 10px;
+  line-height: 1.4;
+  margin-bottom: 3px;
+}
+
+.sc-source {
+  color: #52525b;
+  font-size: 10px;
+}
+
+/* ── Footer ── */
+.sc-footer {
+  padding: 6px 12px;
+  border-top: 1px solid #1c1d1f;
+  background: #0e0f11;
+  font-size: 9px;
+  color: #3f3f46;
+  text-align: center;
+  flex-shrink: 0;
+}
