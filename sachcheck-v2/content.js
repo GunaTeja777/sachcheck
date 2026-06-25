@@ -254,60 +254,64 @@ function addResultCard(claim, result) {
 async function pollLoop() {
   if (!isRunning) return;
 
-  const caption = scrapeYouTubeCaptions();
+  try {
+    const caption = scrapeYouTubeCaptions();
 
-  if (caption && caption.length > 5) {
-    // Append the new caption text to our accumulated running buffer
-    accumulatedText = appendToBuffer(accumulatedText, caption);
-    
-    // Update the live preview with the last 130 characters of our text buffer
-    setCaptionPreview(accumulatedText);
-
-    // Look for the best factual claim in the accumulated text
-    const claim = extractBestClaim(accumulatedText);
-
-    // Check if a new claim has been found, it's different from the last checked claim,
-    // and at least 12 seconds have passed since our last Gemini API request (to prevent spamming/rate limits)
-    if (claim && claim !== lastClaim && (Date.now() - lastRequestTime > 12000)) {
-      lastClaim = claim;
-      lastRequestTime = Date.now();
+    if (caption && caption.length > 5) {
+      // Append the new caption text to our accumulated running buffer
+      accumulatedText = appendToBuffer(accumulatedText, caption);
       
-      setStatus("🔍 Checking with Gemini...");
+      // Update the live preview with the last 130 characters of our text buffer
+      setCaptionPreview(accumulatedText);
 
-      const apiKey = await getKey();
-      if (!apiKey) {
-        setStatus("⚠️ No API key set");
-        scheduleNext();
-        return;
-      }
+      // Look for the best factual claim in the accumulated text
+      const claim = extractBestClaim(accumulatedText);
 
-      // Send fact-check request
-      const response = await chrome.runtime.sendMessage({
-        type: "FACT_CHECK",
-        claim,
-        apiKey
-      });
+      // Check if a new claim has been found, it's different from the last checked claim,
+      // and at least 12 seconds have passed since our last Groq API request (to prevent spamming/rate limits)
+      if (claim && claim !== lastClaim && (Date.now() - lastRequestTime > 12000)) {
+        lastClaim = claim;
+        lastRequestTime = Date.now();
+        
+        setStatus("🔍 Checking with Groq...");
 
-      if (response.success) {
-        addResultCard(claim, response.result);
-        setStatus("🟢 Live — last checked " + new Date().toLocaleTimeString("en-IN"));
-        // Trim the buffer after a successful check to keep it fresh and prevent duplicates
-        if (accumulatedText.length > 150) {
-          accumulatedText = accumulatedText.slice(-100);
+        const apiKey = await getKey();
+        if (!apiKey) {
+          setStatus("⚠️ No API key set");
+          return;
         }
-      } else {
-        setStatus("⚠️ Error: " + (response.error || "unknown"));
-        console.log("[SachCheck] Fact-check API error:", response.error);
+
+        // Send fact-check request
+        const response = await chrome.runtime.sendMessage({
+          type: "FACT_CHECK",
+          claim,
+          apiKey
+        });
+
+        if (response && response.success) {
+          addResultCard(claim, response.result);
+          setStatus("🟢 Live — last checked " + new Date().toLocaleTimeString("en-IN"));
+          // Trim the buffer after a successful check to keep it fresh and prevent duplicates
+          if (accumulatedText.length > 150) {
+            accumulatedText = accumulatedText.slice(-100);
+          }
+        } else {
+          const errMsg = response?.error || "unknown error";
+          setStatus("⚠️ Error: " + errMsg);
+          console.log("[SachCheck] Fact-check API error:", errMsg);
+        }
       }
     }
-  }
 
-  // If the buffer grows too large, trim it so it stays fresh
-  if (accumulatedText.length > 350) {
-    accumulatedText = accumulatedText.slice(-250);
+    // If the buffer grows too large, trim it so it stays fresh
+    if (accumulatedText.length > 350) {
+      accumulatedText = accumulatedText.slice(-250);
+    }
+  } catch (err) {
+    console.log("[SachCheck] Error in pollLoop:", err.message);
+  } finally {
+    scheduleNext();
   }
-
-  scheduleNext();
 }
 
 function scheduleNext() {
