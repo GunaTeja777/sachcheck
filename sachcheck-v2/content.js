@@ -279,7 +279,7 @@ async function pollLoop() {
         setStatus("🟢 Live — last checked " + new Date().toLocaleTimeString("en-IN"));
       } else {
         setStatus("⚠️ Error: " + (response.error || "unknown"));
-        console.error("[SachCheck]", response.error);
+        console.log("[SachCheck] Fact-check API error:", response.error);
       }
     }
   }

@@ -90,7 +90,7 @@ function updateActiveTab() {
         }
       });
     } catch (e) {
-      console.warn("[SachCheck] Could not request status from tab:", e);
+      console.log("[SachCheck] Could not request status from tab:", e);
       setStartUI();
       isRunning = false;
     }
@@ -155,7 +155,7 @@ mainBtn.addEventListener("click", () => {
     const type = isRunning ? "STOP" : "START";
     chrome.tabs.sendMessage(tab.id, { type }, () => {
       if (chrome.runtime.lastError) {
-        console.warn("[SachCheck] sendMessage failed:", chrome.runtime.lastError.message);
+        console.log("[SachCheck] sendMessage failed:", chrome.runtime.lastError.message);
         return;
       }
       isRunning = !isRunning;

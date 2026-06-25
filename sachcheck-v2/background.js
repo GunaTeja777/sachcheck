@@ -7,7 +7,7 @@
 if (chrome.sidePanel) {
   chrome.sidePanel
     .setPanelBehavior({ openPanelOnActionClick: true })
-    .catch((error) => console.error("Error setting side panel behavior:", error));
+    .catch((error) => console.log("Error setting side panel behavior:", error));
 }
 
 // Track when side panel is closed to auto-close in-page overlays
@@ -98,7 +98,7 @@ async function getAvailableModels(apiKey) {
     console.log("[SachCheck] Available models from API:", validModels);
     return validModels;
   } catch (err) {
-    console.error("[SachCheck] Error fetching model list:", err);
+    console.log("[SachCheck] Error fetching model list:", err);
     // Return sensible fallback defaults if the API list endpoint fails
     return [
       "gemini-2.0-flash",
@@ -121,7 +121,7 @@ function sortModels(availableModels) {
 }
 
 async function handleFactCheck(claim, apiKey) {
-  const prompt = `You are SachCheck, a real-time fact-checker for Indian news channels (Republic TV, Zee News, NDTV, Times Now, Aaj Tak, India Today).
+  const prompt = `You are SachCheck, an unbiased, highly accurate, and decisive real-time fact-checker for Indian news broadcasts.
 
 Fact-check this claim using Google Search: "${claim}"
 
@@ -136,12 +136,17 @@ Return ONLY a raw JSON object — no markdown, no code fences, no explanation. E
 }
 
 Rules:
-- Use Google Search before concluding.
+- Search Google thoroughly to find official reports, reputable news outlets, or Indian fact-checking websites (e.g., PIB Fact Check, Alt News, Boom Live).
+- If a claim is contradicted by facts, official data, or credible sources, immediately label the verdict as "FALSE". Do not be hesitant to mark wrong information as "FALSE".
 - Only fact-check verifiable factual claims, not opinions.
-- If unverifiable, use UNVERIFIED.
+- If unverifiable, use "UNVERIFIED".
 - Language Rule: If the input claim is in Hindi or Hinglish (transliterated Hindi), write the "summary", "evidence", and "speak" fields in Hindi (using Devanagari script). Otherwise, write them in English.
 - The "verdict" field MUST always be in English ("TRUE", "MISLEADING", "FALSE", or "UNVERIFIED") for system parsing.
-- The "speak" field must be a natural spoken sentence. Example in English: "This claim is TRUE. India's GDP growth is confirmed at 8.2 percent." Example in Hindi: "यह दावा सच है। भारत की जीडीपी ग्रोथ 8.2 प्रतिशत दर्ज की गई है।"`;
+- The "speak" field must be a natural spoken sentence.
+  Example of TRUE in English: "This claim is TRUE. India's GDP growth is confirmed at 8.2 percent."
+  Example of FALSE in English: "This claim is FALSE. The government has not announced any such tax cut."
+  Example of TRUE in Hindi: "यह दावा सच है। भारत की जीडीपी ग्रोथ 8.2 प्रतिशत दर्ज की गई है।"
+  Example of FALSE in Hindi: "यह दावा गलत है। सरकार ने ऐसे किसी टैक्स कटौती की घोषणा नहीं की है।"`;
 
   const bodyWithSearch = {
     contents: [{ parts: [{ text: prompt }] }],
@@ -186,7 +191,7 @@ Rules:
       console.log(`[SachCheck] Successful fact-check with model ${config.name}`);
       return result;
     } catch (err) {
-      console.warn(`[SachCheck] Model ${config.name} (Search: ${config.useSearch}) failed:`, err.message);
+      console.log(`[SachCheck] Model ${config.name} (Search: ${config.useSearch}) failed:`, err.message);
       lastError = err;
     }
   }
