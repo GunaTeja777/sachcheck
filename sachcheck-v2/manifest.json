@@ -1,21 +1,21 @@
 {
   "manifest_version": 3,
   "name": "SachCheck – Indian News Fact-Checker",
-  "version": "2.0.0",
-  "description": "Real-time fact-checking + voice verdicts for Indian news on YouTube Live. Powered by Gemini AI.",
+  "version": "2.1.0",
+  "description": "Real-time fact-checking + voice verdicts for Indian news on YouTube Live. Powered by Groq AI.",
   "permissions": [
     "storage",
     "activeTab",
     "scripting",
     "tts",
     "sidePanel",
-    "tabs"
+    "tabs",
+    "alarms"
   ],
   "host_permissions": [
     "https://www.youtube.com/*",
-    "https://generativelanguage.googleapis.com/*",
     "https://api.groq.com/*",
-    "https://*.duckduckgo.com/*"
+    "https://api.duckduckgo.com/*"
   ],
   "background": {
     "service_worker": "background.js"

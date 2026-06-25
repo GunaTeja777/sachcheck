@@ -1,25 +1,29 @@
-// background.js — SachCheck v2
-// Uses Gemini 2.0 Flash with Google Search grounding
+// background.js — SachCheck v2.1 (fixed)
 
-// API base endpoint. URL is dynamically generated based on active model fallback.
-
-// Open side panel when clicking the extension icon
+// ── Side Panel Behavior ───────────────────────────────────────────────────────
 if (chrome.sidePanel) {
   chrome.sidePanel
     .setPanelBehavior({ openPanelOnActionClick: true })
-    .catch((error) => console.log("Error setting side panel behavior:", error));
+    .catch((err) => console.log("Error setting side panel behavior:", err));
 }
 
-// Track when side panel is closed to auto-close in-page overlays
+// ── Service Worker Keep-Alive ─────────────────────────────────────────────────
+// MV3 service workers die after ~30s idle. We keep it alive via a recurring alarm.
+chrome.alarms.create("keepAlive", { periodInMinutes: 0.4 });
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === "keepAlive") {
+    // No-op ping just to keep the SW alive
+  }
+});
+
+// ── Side Panel Close → Stop overlays ─────────────────────────────────────────
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name === "sidepanel") {
     port.onDisconnect.addListener(() => {
-      console.log("[SachCheck] Side panel closed. Cleaning up overlays...");
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         const tab = tabs[0];
         if (tab?.id) {
           chrome.tabs.sendMessage(tab.id, { type: "STOP" }, () => {
-            // Ignore error if tab is closed or content script is not loaded
             if (chrome.runtime.lastError) {}
           });
         }
@@ -39,110 +43,79 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "SAVE_API_KEY") {
-    chrome.storage.local.set({ groqKey: message.apiKey }, () =>
+    // Use storage.sync so key persists across profile resets
+    chrome.storage.sync.set({ groqKey: message.apiKey }, () =>
       sendResponse({ success: true })
     );
     return true;
   }
 
   if (message.type === "GET_API_KEY") {
-    chrome.storage.local.get("groqKey", data =>
+    chrome.storage.sync.get("groqKey", data =>
       sendResponse({ apiKey: data.groqKey || "" })
     );
     return true;
   }
 
   if (message.type === "SAVE_VOICE_PREF") {
-    chrome.storage.local.set({ voiceEnabled: message.enabled }, () =>
+    chrome.storage.sync.set({ voiceEnabled: message.enabled }, () =>
       sendResponse({ success: true })
     );
     return true;
   }
 
   if (message.type === "GET_VOICE_PREF") {
-    chrome.storage.local.get("voiceEnabled", data =>
-      sendResponse({ enabled: data.voiceEnabled !== false }) // default ON
+    chrome.storage.sync.get("voiceEnabled", data =>
+      sendResponse({ enabled: data.voiceEnabled !== false })
     );
     return true;
   }
 });
 
-// ── DuckDuckGo HTML Web Search ───────────────────────────────────────────────
+// ── DuckDuckGo Instant Answer API (replaces broken HTML scrape) ───────────────
 async function searchWeb(query) {
-  // 1. Try DuckDuckGo HTML Search
-  try {
-    const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
-      }
-    });
-    if (!response.ok) throw new Error(`DuckDuckGo HTML search failed: status ${response.status}`);
-    const html = await response.text();
-    
-    const snippets = [];
-    const regex = /<a class="result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/g;
-    let match;
-    while ((match = regex.exec(html)) !== null && snippets.length < 5) {
-      const cleanText = match[1].replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
-      if (cleanText) snippets.push(cleanText);
-    }
-    
-    if (snippets.length > 0) {
-      return snippets.join("\n\n");
-    }
-    
-    console.warn("[SachCheck] DuckDuckGo HTML search returned empty results (likely CAPTCHA/bot blocked). Trying JSON Instant-Answer API fallback...");
-  } catch (err) {
-    console.warn("[SachCheck] DuckDuckGo HTML search error, trying JSON Instant-Answer API fallback:", err.message);
-  }
-
-  // 2. Try DuckDuckGo JSON Instant Answer API as a key-free fallback
   try {
     const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`DuckDuckGo JSON API failed: status ${response.status}`);
+    const response = await fetch(url, {
+      headers: { "Accept": "application/json" }
+    });
+    if (!response.ok) throw new Error(`DDG API status: ${response.status}`);
     const data = await response.json();
-    
-    const snippets = [];
-    if (data.AbstractText) {
-      snippets.push(data.AbstractText);
-    }
-    if (data.RelatedTopics && Array.isArray(data.RelatedTopics)) {
-      for (const item of data.RelatedTopics) {
-        if (item.Topics && Array.isArray(item.Topics)) {
-          for (const subItem of item.Topics) {
-            if (subItem.Text && snippets.length < 5) {
-              snippets.push(subItem.Text);
-            }
+
+    const parts = [];
+
+    // Abstract text (best summary)
+    if (data.AbstractText) parts.push(data.AbstractText);
+
+    // Related topics snippets
+    if (Array.isArray(data.RelatedTopics)) {
+      for (const t of data.RelatedTopics.slice(0, 4)) {
+        if (t.Text) parts.push(t.Text);
+        // Nested Topics
+        if (Array.isArray(t.Topics)) {
+          for (const sub of t.Topics.slice(0, 2)) {
+            if (sub.Text) parts.push(sub.Text);
           }
-        } else if (item.Text && snippets.length < 5) {
-          snippets.push(item.Text);
         }
       }
     }
-    
-    if (snippets.length > 0) {
-      console.log("[SachCheck] Web search fetched results from DuckDuckGo JSON Instant-Answer API.");
-      return snippets.join("\n\n");
-    }
-  } catch (err) {
-    console.error("[SachCheck] DuckDuckGo JSON API fallback error:", err.message);
-  }
 
-  console.warn("[SachCheck] Web search completely failed or returned no results. Proceeding with empty web context.");
-  return "";
+    // Answer field
+    if (data.Answer) parts.push(data.Answer);
+
+    const result = parts.filter(Boolean).join("\n\n").trim();
+    console.log("[SachCheck] DDG result length:", result.length);
+    return result;
+  } catch (err) {
+    console.log("[SachCheck] Web search error:", err.message);
+    return "";
+  }
 }
 
-// ── Groq Fact-Check ──────────────────────────────────────────────────────────
+// ── Groq Fact-Check ───────────────────────────────────────────────────────────
 async function handleFactCheck(claim, apiKey) {
-  // 1. Perform Web Search first
   const searchResults = await searchWeb(claim);
-  console.log("[SachCheck] DuckDuckGo search result snippet count:", searchResults ? searchResults.split("\n\n").length : 0);
-  
-  if (!searchResults) {
-    console.warn(`[SachCheck] WARNING: Fact-checking claim "${claim}" with empty search context due to search block or lack of search results.`);
-  }
+  console.log("[SachCheck] Search snippets:", searchResults ? searchResults.slice(0, 100) : "(none)");
 
   const systemInstructions = `You are SachCheck, an unbiased, highly accurate, and decisive real-time fact-checker for Indian news broadcasts.
 You will be given a claim and search snippets from the web.
@@ -159,23 +132,15 @@ Return ONLY a raw JSON object. Do not wrap in markdown or code blocks. Exactly t
 }
 
 Rules:
-- If search snippets contradict the claim, immediately set verdict to "FALSE". Do not be hesitant to mark wrong information as "FALSE".
+- If search snippets contradict the claim, set verdict to "FALSE".
 - Only fact-check verifiable factual claims, not opinions.
-- If search snippets do not have enough information to confirm or deny, use "UNVERIFIED".
-- Language Rule: If the input claim is in Hindi or Hinglish, write the "summary", "evidence", and "speak" fields in Hindi (using Devanagari script). Otherwise, write them in English.
-- The "verdict" field MUST always be in English ("TRUE", "MISLEADING", "FALSE", or "UNVERIFIED") for system parsing.
-- The "speak" field must be a natural spoken sentence.
-  Example of TRUE in English: "This claim is TRUE. India's GDP growth is confirmed at 8.2 percent."
-  Example of FALSE in English: "This claim is FALSE. The government has not announced any such tax cut."
-  Example of TRUE in Hindi: "यह दावा सच है। भारत की जीडीपी ग्रोथ 8.2 प्रतिशत दर्ज की गई है।"
-  Example of FALSE in Hindi: "यह दावा गलत है। सरकार ने ऐसे किसी टैक्स कटौती की घोषणा नहीं की है।"`;
+- If search snippets do not have enough information, use "UNVERIFIED".
+- Language Rule: If the input claim is in Hindi or Hinglish, write the "summary", "evidence", and "speak" fields in Hindi (Devanagari script). Otherwise write in English.
+- The "verdict" field MUST always be in English for system parsing.
+- The "speak" field must be a natural spoken sentence.`;
 
-  const userContent = `Claim: "${claim}"
+  const userContent = `Claim: "${claim}"\n\nWeb Search Snippets:\n${searchResults || "No search results found."}`;
 
-Web Search Snippets:
-${searchResults || "No search results found."}`;
-
-  // Priority list of models to try on Groq
   const modelsToTry = [
     "llama-3.3-70b-versatile",
     "llama-3.1-8b-instant",
@@ -184,25 +149,22 @@ ${searchResults || "No search results found."}`;
   ];
 
   let lastError = null;
-
   for (const modelName of modelsToTry) {
     try {
-      console.log(`[SachCheck] Trying Groq model ${modelName}...`);
       const result = await fetchFromGroqAPI(modelName, systemInstructions, userContent, apiKey);
-      console.log(`[SachCheck] Successful fact-check with Groq model ${modelName}`);
+      console.log(`[SachCheck] Success with model ${modelName}`);
       return result;
     } catch (err) {
-      console.log(`[SachCheck] Groq model ${modelName} failed:`, err.message);
+      console.log(`[SachCheck] Model ${modelName} failed:`, err.message);
       lastError = err;
     }
   }
 
-  throw new Error(`All Groq models failed. Last error: ${lastError?.message || "Unknown error"}`);
+  throw new Error(`All Groq models failed. Last error: ${lastError?.message}`);
 }
 
 async function fetchFromGroqAPI(modelName, systemInstructions, userContent, apiKey) {
-  const url = "https://api.groq.com/openai/v1/chat/completions";
-  const res = await fetch(url, {
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -222,18 +184,16 @@ async function fetchFromGroqAPI(modelName, systemInstructions, userContent, apiK
 
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
-    throw new Error(`Groq API returned status ${res.status}: ${errText}`);
+    throw new Error(`Groq API ${res.status}: ${errText}`);
   }
 
   const data = await res.json();
   const content = data.choices?.[0]?.message?.content;
-  if (!content) {
-    throw new Error("Empty response from Groq model");
-  }
+  if (!content) throw new Error("Empty response from Groq");
 
   try {
     return JSON.parse(content.trim());
-  } catch (err) {
-    throw new Error(`Failed to parse Groq response as JSON: ${content}`);
+  } catch {
+    throw new Error(`JSON parse failed: ${content}`);
   }
 }
