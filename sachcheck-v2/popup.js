@@ -32,8 +32,8 @@ const INDIAN_CHANNELS = [
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 // Load saved key
-chrome.storage.local.get("geminiKey", data => {
-  if (data.geminiKey) apiKeyInput.value = data.geminiKey;
+chrome.storage.local.get("groqKey", data => {
+  if (data.groqKey) apiKeyInput.value = data.groqKey;
 });
 
 // Load voice pref
@@ -133,10 +133,10 @@ mainBtn.addEventListener("click", () => {
 
   if (!key) {
     apiKeyInput.style.borderColor = "#ef4444";
-    apiKeyInput.placeholder = "Gemini API key required!";
+    apiKeyInput.placeholder = "Groq API key required!";
     setTimeout(() => {
       apiKeyInput.style.borderColor = "";
-      apiKeyInput.placeholder = "AIza...";
+      apiKeyInput.placeholder = "gsk_...";
     }, 2500);
     return;
   }

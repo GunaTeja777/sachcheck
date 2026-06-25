@@ -39,15 +39,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "SAVE_API_KEY") {
-    chrome.storage.local.set({ geminiKey: message.apiKey }, () =>
+    chrome.storage.local.set({ groqKey: message.apiKey }, () =>
       sendResponse({ success: true })
     );
     return true;
   }
 
   if (message.type === "GET_API_KEY") {
-    chrome.storage.local.get("geminiKey", data =>
-      sendResponse({ apiKey: data.geminiKey || "" })
+    chrome.storage.local.get("groqKey", data =>
+      sendResponse({ apiKey: data.groqKey || "" })
     );
     return true;
   }
@@ -67,65 +67,43 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-// ── Gemini Fact-Check ─────────────────────────────────────────────────────────
-
-const PREFERENCE_ORDER = [
-  "gemini-2.0-flash",
-  "gemini-1.5-flash",
-  "gemini-1.5-flash-latest",
-  "gemini-2.0-flash-lite-preview-02-05",
-  "gemini-1.5-pro",
-  "gemini-1.5-pro-latest",
-  "gemini-1.5-flash-8b",
-  "gemini-1.5-flash-8b-latest"
-];
-
-async function getAvailableModels(apiKey) {
+// ── DuckDuckGo HTML Web Search ───────────────────────────────────────────────
+async function searchWeb(query) {
   try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-    if (!res.ok) throw new Error(`ListModels failed with status ${res.status}`);
-    const data = await res.json();
+    const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
+      }
+    });
+    if (!response.ok) throw new Error(`DuckDuckGo request failed: ${response.status}`);
+    const html = await response.text();
     
-    if (!data.models || !Array.isArray(data.models)) {
-      throw new Error("Invalid models list response format");
+    const snippets = [];
+    const regex = /<a class="result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/g;
+    let match;
+    while ((match = regex.exec(html)) !== null && snippets.length < 5) {
+      const cleanText = match[1].replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+      if (cleanText) snippets.push(cleanText);
     }
-
-    // Filter models that support generateContent
-    const validModels = data.models
-      .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent"))
-      .map(m => m.name.replace("models/", "")); // Strip 'models/' prefix
-
-    console.log("[SachCheck] Available models from API:", validModels);
-    return validModels;
+    return snippets.join("\n\n");
   } catch (err) {
-    console.log("[SachCheck] Error fetching model list:", err);
-    // Return sensible fallback defaults if the API list endpoint fails
-    return [
-      "gemini-2.0-flash",
-      "gemini-1.5-flash-latest",
-      "gemini-1.5-flash",
-      "gemini-2.0-flash-lite-preview-02-05",
-      "gemini-1.5-pro"
-    ];
+    console.log("[SachCheck] Web search error:", err.message);
+    return "";
   }
 }
 
-function sortModels(availableModels) {
-  return [...availableModels].sort((a, b) => {
-    let indexA = PREFERENCE_ORDER.indexOf(a);
-    let indexB = PREFERENCE_ORDER.indexOf(b);
-    if (indexA === -1) indexA = 999;
-    if (indexB === -1) indexB = 999;
-    return indexA - indexB;
-  });
-}
-
+// ── Groq Fact-Check ──────────────────────────────────────────────────────────
 async function handleFactCheck(claim, apiKey) {
-  const prompt = `You are SachCheck, an unbiased, highly accurate, and decisive real-time fact-checker for Indian news broadcasts.
+  // 1. Perform Web Search first
+  const searchResults = await searchWeb(claim);
+  console.log("[SachCheck] DuckDuckGo search result snippet count:", searchResults ? searchResults.split("\n\n").length : 0);
 
-Fact-check this claim using Google Search: "${claim}"
+  const systemInstructions = `You are SachCheck, an unbiased, highly accurate, and decisive real-time fact-checker for Indian news broadcasts.
+You will be given a claim and search snippets from the web.
+Analyze the search snippets and fact-check the claim.
 
-Return ONLY a raw JSON object — no markdown, no code fences, no explanation. Exactly this structure:
+Return ONLY a raw JSON object. Do not wrap in markdown or code blocks. Exactly this structure:
 {
   "verdict": "TRUE" or "MISLEADING" or "FALSE" or "UNVERIFIED",
   "confidence": <integer 0-100>,
@@ -136,11 +114,10 @@ Return ONLY a raw JSON object — no markdown, no code fences, no explanation. E
 }
 
 Rules:
-- Search Google thoroughly to find official reports, reputable news outlets, or Indian fact-checking websites (e.g., PIB Fact Check, Alt News, Boom Live).
-- If a claim is contradicted by facts, official data, or credible sources, immediately label the verdict as "FALSE". Do not be hesitant to mark wrong information as "FALSE".
+- If search snippets contradict the claim, immediately set verdict to "FALSE". Do not be hesitant to mark wrong information as "FALSE".
 - Only fact-check verifiable factual claims, not opinions.
-- If unverifiable, use "UNVERIFIED".
-- Language Rule: If the input claim is in Hindi or Hinglish (transliterated Hindi), write the "summary", "evidence", and "speak" fields in Hindi (using Devanagari script). Otherwise, write them in English.
+- If search snippets do not have enough information to confirm or deny, use "UNVERIFIED".
+- Language Rule: If the input claim is in Hindi or Hinglish, write the "summary", "evidence", and "speak" fields in Hindi (using Devanagari script). Otherwise, write them in English.
 - The "verdict" field MUST always be in English ("TRUE", "MISLEADING", "FALSE", or "UNVERIFIED") for system parsing.
 - The "speak" field must be a natural spoken sentence.
   Example of TRUE in English: "This claim is TRUE. India's GDP growth is confirmed at 8.2 percent."
@@ -148,90 +125,70 @@ Rules:
   Example of TRUE in Hindi: "यह दावा सच है। भारत की जीडीपी ग्रोथ 8.2 प्रतिशत दर्ज की गई है।"
   Example of FALSE in Hindi: "यह दावा गलत है। सरकार ने ऐसे किसी टैक्स कटौती की घोषणा नहीं की है।"`;
 
-  const bodyWithSearch = {
-    contents: [{ parts: [{ text: prompt }] }],
-    tools: [{ google_search: {} }],
-    generationConfig: {
-      temperature: 0.1,
-      maxOutputTokens: 256
-    }
-  };
+  const userContent = `Claim: "${claim}"
 
-  const bodyWithoutSearch = {
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: {
-      temperature: 0.1,
-      maxOutputTokens: 256
-    }
-  };
+Web Search Snippets:
+${searchResults || "No search results found."}`;
 
-  // Get active models from user's key
-  const available = await getAvailableModels(apiKey);
-  const sorted = sortModels(available);
-
-  // Construct target config queue
-  const configsToTry = [];
-  
-  // Try all sorted models WITH search first
-  for (const modelName of sorted) {
-    configsToTry.push({ name: modelName, useSearch: true });
-  }
-  // Try all sorted models WITHOUT search as a final fallback (e.g. if grounding limits or issues occur)
-  for (const modelName of sorted) {
-    configsToTry.push({ name: modelName, useSearch: false });
-  }
+  // Priority list of models to try on Groq
+  const modelsToTry = [
+    "llama-3.3-70b-specdec",
+    "llama-3.1-8b-instant",
+    "llama3-70b-8192",
+    "mixtral-8x7b-32768"
+  ];
 
   let lastError = null;
 
-  for (const config of configsToTry) {
+  for (const modelName of modelsToTry) {
     try {
-      console.log(`[SachCheck] Trying model ${config.name} (Search: ${config.useSearch})...`);
-      const body = config.useSearch ? bodyWithSearch : bodyWithoutSearch;
-      const result = await fetchFromGeminiAPI(config.name, body, apiKey);
-      console.log(`[SachCheck] Successful fact-check with model ${config.name}`);
+      console.log(`[SachCheck] Trying Groq model ${modelName}...`);
+      const result = await fetchFromGroqAPI(modelName, systemInstructions, userContent, apiKey);
+      console.log(`[SachCheck] Successful fact-check with Groq model ${modelName}`);
       return result;
     } catch (err) {
-      console.log(`[SachCheck] Model ${config.name} (Search: ${config.useSearch}) failed:`, err.message);
+      console.log(`[SachCheck] Groq model ${modelName} failed:`, err.message);
       lastError = err;
     }
   }
 
-  throw new Error(`All Gemini models failed. Last error: ${lastError?.message || "Unknown error"}`);
+  throw new Error(`All Groq models failed. Last error: ${lastError?.message || "Unknown error"}`);
 }
 
-async function fetchFromGeminiAPI(modelName, body, apiKey) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-
+async function fetchFromGroqAPI(modelName, systemInstructions, userContent, apiKey) {
+  const url = "https://api.groq.com/openai/v1/chat/completions";
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: modelName,
+      messages: [
+        { role: "system", content: systemInstructions },
+        { role: "user", content: userContent }
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.1,
+      max_tokens: 256
+    })
   });
 
-  const data = await res.json();
-
   if (!res.ok) {
-    const msg = data.error?.message || `API error ${res.status}`;
-    throw new Error(msg);
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Groq API returned status ${res.status}: ${errText}`);
   }
 
-  const raw = data.candidates?.[0]?.content?.parts
-    ?.map(p => p.text || "")
-    .join("")
-    .trim() || "";
-
-  const clean = raw.replace(/```json|```/g, "").trim();
+  const data = await res.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) {
+    throw new Error("Empty response from Groq model");
+  }
 
   try {
-    return JSON.parse(clean);
-  } catch {
-    return {
-      verdict: "UNVERIFIED",
-      confidence: 0,
-      summary: "Could not parse Gemini response.",
-      evidence: raw.slice(0, 100),
-      source: "Gemini AI",
-      speak: "Verdict is unverified. Could not parse the response."
-    };
+    return JSON.parse(content.trim());
+  } catch (err) {
+    throw new Error(`Failed to parse Groq response as JSON: ${content}`);
   }
 }
