@@ -69,6 +69,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // ── DuckDuckGo HTML Web Search ───────────────────────────────────────────────
 async function searchWeb(query) {
+  // 1. Try DuckDuckGo HTML Search
   try {
     const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
     const response = await fetch(url, {
@@ -76,7 +77,7 @@ async function searchWeb(query) {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
       }
     });
-    if (!response.ok) throw new Error(`DuckDuckGo request failed: ${response.status}`);
+    if (!response.ok) throw new Error(`DuckDuckGo HTML search failed: status ${response.status}`);
     const html = await response.text();
     
     const snippets = [];
@@ -86,11 +87,51 @@ async function searchWeb(query) {
       const cleanText = match[1].replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
       if (cleanText) snippets.push(cleanText);
     }
-    return snippets.join("\n\n");
+    
+    if (snippets.length > 0) {
+      return snippets.join("\n\n");
+    }
+    
+    console.warn("[SachCheck] DuckDuckGo HTML search returned empty results (likely CAPTCHA/bot blocked). Trying JSON Instant-Answer API fallback...");
   } catch (err) {
-    console.log("[SachCheck] Web search error:", err.message);
-    return "";
+    console.warn("[SachCheck] DuckDuckGo HTML search error, trying JSON Instant-Answer API fallback:", err.message);
   }
+
+  // 2. Try DuckDuckGo JSON Instant Answer API as a key-free fallback
+  try {
+    const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`DuckDuckGo JSON API failed: status ${response.status}`);
+    const data = await response.json();
+    
+    const snippets = [];
+    if (data.AbstractText) {
+      snippets.push(data.AbstractText);
+    }
+    if (data.RelatedTopics && Array.isArray(data.RelatedTopics)) {
+      for (const item of data.RelatedTopics) {
+        if (item.Topics && Array.isArray(item.Topics)) {
+          for (const subItem of item.Topics) {
+            if (subItem.Text && snippets.length < 5) {
+              snippets.push(subItem.Text);
+            }
+          }
+        } else if (item.Text && snippets.length < 5) {
+          snippets.push(item.Text);
+        }
+      }
+    }
+    
+    if (snippets.length > 0) {
+      console.log("[SachCheck] Web search fetched results from DuckDuckGo JSON Instant-Answer API.");
+      return snippets.join("\n\n");
+    }
+  } catch (err) {
+    console.error("[SachCheck] DuckDuckGo JSON API fallback error:", err.message);
+  }
+
+  console.warn("[SachCheck] Web search completely failed or returned no results. Proceeding with empty web context.");
+  return "";
 }
 
 // ── Groq Fact-Check ──────────────────────────────────────────────────────────
@@ -98,6 +139,10 @@ async function handleFactCheck(claim, apiKey) {
   // 1. Perform Web Search first
   const searchResults = await searchWeb(claim);
   console.log("[SachCheck] DuckDuckGo search result snippet count:", searchResults ? searchResults.split("\n\n").length : 0);
+  
+  if (!searchResults) {
+    console.warn(`[SachCheck] WARNING: Fact-checking claim "${claim}" with empty search context due to search block or lack of search results.`);
+  }
 
   const systemInstructions = `You are SachCheck, an unbiased, highly accurate, and decisive real-time fact-checker for Indian news broadcasts.
 You will be given a claim and search snippets from the web.

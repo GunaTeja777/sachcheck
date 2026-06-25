@@ -15,7 +15,7 @@
     "https://www.youtube.com/*",
     "https://generativelanguage.googleapis.com/*",
     "https://api.groq.com/*",
-    "https://html.duckduckgo.com/*"
+    "https://*.duckduckgo.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -30,6 +30,7 @@
   ],
   "action": {
     "default_title": "SachCheck",
+    "default_popup": "popup.html",
     "default_icon": {
       "16":  "icons/icon16.png",
       "48":  "icons/icon48.png",

@@ -20,46 +20,64 @@ function containsDevanagari(text) {
   return /[\u0900-\u097F]/.test(text);
 }
 
+// Helper to escape HTML characters (XSS protection)
+function escapeHTML(str) {
+  if (!str) return "";
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 // ── Speech Synthesis (Web Speech API) ────────────────────────────────────────
 function speak(text) {
-  if (!voiceEnabled) return;
-  if (!window.speechSynthesis) return;
+  if (!voiceEnabled || !window.speechSynthesis) return;
 
   // Cancel any ongoing speech
   window.speechSynthesis.cancel();
 
-  const utter = new SpeechSynthesisUtterance(text);
-  const isHindi = containsDevanagari(text);
-  
-  utter.rate  = 0.95;
-  utter.pitch = 1.0;
-  utter.volume = 1.0;
+  const trySpeak = () => {
+    const utter = new SpeechSynthesisUtterance(text);
+    const isHindi = containsDevanagari(text);
+    
+    utter.rate  = 0.95;
+    utter.pitch = 1.0;
+    utter.volume = 1.0;
 
-  const voices = window.speechSynthesis.getVoices();
+    const voices = window.speechSynthesis.getVoices();
 
-  if (isHindi) {
-    utter.lang = "hi-IN";
-    // Prefer an Indian Hindi voice if the browser has one
-    const hindi = voices.find(v =>
-      v.lang === "hi-IN" ||
-      v.name.toLowerCase().includes("hindi") ||
-      v.name.toLowerCase().includes("lekha") ||
-      v.name.toLowerCase().includes("kalpana")
-    );
-    if (hindi) utter.voice = hindi;
+    if (isHindi) {
+      utter.lang = "hi-IN";
+      // Prefer an Indian Hindi voice if the browser has one
+      const hindi = voices.find(v =>
+        v.lang === "hi-IN" ||
+        v.name.toLowerCase().includes("hindi") ||
+        v.name.toLowerCase().includes("lekha") ||
+        v.name.toLowerCase().includes("kalpana")
+      );
+      if (hindi) utter.voice = hindi;
+    } else {
+      utter.lang  = "en-IN";   // Indian English accent if available
+      // Prefer an Indian English voice if the browser has one
+      const indian = voices.find(v =>
+        v.lang === "en-IN" ||
+        v.name.toLowerCase().includes("india") ||
+        v.name.toLowerCase().includes("ravi") ||
+        v.name.toLowerCase().includes("veena")
+      );
+      if (indian) utter.voice = indian;
+    }
+
+    window.speechSynthesis.speak(utter);
+  };
+
+  if (window.speechSynthesis.getVoices().length === 0) {
+    window.speechSynthesis.addEventListener("voiceschanged", trySpeak, { once: true });
   } else {
-    utter.lang  = "en-IN";   // Indian English accent if available
-    // Prefer an Indian English voice if the browser has one
-    const indian = voices.find(v =>
-      v.lang === "en-IN" ||
-      v.name.toLowerCase().includes("india") ||
-      v.name.toLowerCase().includes("ravi") ||
-      v.name.toLowerCase().includes("veena")
-    );
-    if (indian) utter.voice = indian;
+    trySpeak();
   }
-
-  window.speechSynthesis.speak(utter);
 }
 
 // Load voices (Chrome loads them async)
@@ -233,10 +251,10 @@ function addResultCard(claim, result) {
       <span class="sc-conf">${result.confidence ?? 0}%</span>
       <span class="sc-time">${new Date().toLocaleTimeString("en-IN", {hour:"2-digit", minute:"2-digit"})}</span>
     </div>
-    <div class="sc-claim-quote">"${claim.slice(0, 90)}${claim.length > 90 ? "…" : ""}"</div>
-    <div class="sc-summary">${result.summary || ""}</div>
-    <div class="sc-evidence">&#128240; ${result.evidence || ""}</div>
-    ${result.source ? `<div class="sc-source">&#128279; ${result.source}</div>` : ""}
+    <div class="sc-claim-quote">"${escapeHTML(claim.slice(0, 90))}${claim.length > 90 ? "…" : ""}"</div>
+    <div class="sc-summary">${escapeHTML(result.summary || "")}</div>
+    <div class="sc-evidence">&#128240; ${escapeHTML(result.evidence || "")}</div>
+    ${result.source ? `<div class="sc-source">&#128279; ${escapeHTML(result.source)}</div>` : ""}
   `;
 
   feed.insertBefore(card, feed.firstChild);
@@ -257,7 +275,7 @@ async function pollLoop() {
   try {
     const caption = scrapeYouTubeCaptions();
 
-    if (caption && caption.length > 5) {
+    if (caption && caption.length > 5 && isCaptionNew(caption)) {
       // Append the new caption text to our accumulated running buffer
       accumulatedText = appendToBuffer(accumulatedText, caption);
       

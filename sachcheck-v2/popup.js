@@ -100,13 +100,8 @@ function updateActiveTab() {
 // Run on initial load
 updateActiveTab();
 
-// Listen for tab switching and URL updates
-chrome.tabs.onActivated.addListener(updateActiveTab);
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.status === "complete" && tab && tab.active) {
-    updateActiveTab();
-  }
-});
+// Poll tab status on a timer instead of using tab listeners
+setInterval(updateActiveTab, 2000);
 
 // ── Events ────────────────────────────────────────────────────────────────────
 
@@ -152,6 +147,12 @@ mainBtn.addEventListener("click", () => {
   chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
     const tab = tabs[0];
     if (!tab) return;
+
+    if (!tab.url?.includes("youtube.com")) {
+      channelText.textContent = "⚠️ Please open YouTube first!";
+      return;
+    }
+
     const type = isRunning ? "STOP" : "START";
     chrome.tabs.sendMessage(tab.id, { type }, () => {
       if (chrome.runtime.lastError) {
