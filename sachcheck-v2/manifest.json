@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SachCheck – Indian News Fact-Checker",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Real-time fact-checking + voice verdicts for Indian news on YouTube Live. Powered by Groq AI.",
   "permissions": [
     "storage",
@@ -14,8 +14,7 @@
   ],
   "host_permissions": [
     "https://www.youtube.com/*",
-    "https://api.groq.com/*",
-    "https://api.duckduckgo.com/*"
+    "https://api.groq.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -30,7 +29,6 @@
   ],
   "action": {
     "default_title": "SachCheck",
-    "default_popup": "popup.html",
     "default_icon": {
       "16":  "icons/icon16.png",
       "48":  "icons/icon48.png",
