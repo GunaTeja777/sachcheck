@@ -114,6 +114,7 @@ saveBtn.addEventListener("click", () => {
   const key = apiKeyInput.value.trim();
   if (!key) return;
   chrome.runtime.sendMessage({ type: "SAVE_API_KEY", apiKey: key }, () => {
+    if (chrome.runtime.lastError) {}
     savedMsg.textContent = "✓ Key saved";
     setTimeout(() => savedMsg.textContent = "", 2000);
   });
@@ -122,7 +123,9 @@ saveBtn.addEventListener("click", () => {
 voiceToggle.addEventListener("click", () => {
   voiceOn = !voiceOn;
   voiceToggle.className = "toggle" + (voiceOn ? " on" : "");
-  chrome.runtime.sendMessage({ type: "SAVE_VOICE_PREF", enabled: voiceOn });
+  chrome.runtime.sendMessage({ type: "SAVE_VOICE_PREF", enabled: voiceOn }, () => {
+    if (chrome.runtime.lastError) {}
+  });
 });
 
 mainBtn.addEventListener("click", () => {
